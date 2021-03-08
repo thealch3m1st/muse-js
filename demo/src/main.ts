@@ -1,6 +1,7 @@
 // tslint:disable:no-console
 
 import { PPGReading } from '../../src/lib/muse-interfaces';
+import { zipSamples, zipSamplesPPG } from '../../src/lib/zip-samples';
 import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../src/muse';
 
 (window as any).connect = async () => {
@@ -20,12 +21,16 @@ import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../s
         item.textContent = ppgChannelNames[index];
     });
 
+    console.log('is this running?');
+
     function plot(reading: EEGReading) {
         const canvas = canvases[reading.electrode];
         const context = canvasCtx[reading.electrode];
         if (!context) {
+            console.log('no context');
             return;
         }
+        console.log('context');
         const width = canvas.width / 12.0;
         const height = canvas.height / 2.0;
         context.fillStyle = 'green';
@@ -45,14 +50,16 @@ import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../s
         const canvas = ppgcanvases[reading.channel];
         const context = ppgcanvasCtx[reading.channel];
         if (!context) {
+            console.log('no context');
             return;
         }
+        console.log('context');
         const width = canvas.width / 12.0;
         const height = canvas.height / 2.0;
         context.fillStyle = 'green';
         context.clearRect(0, 0, canvas.width, canvas.height);
         if (reading.channel !== 2) {
-            console.log(reading.samples, reading.channel);
+            // console.log(reading.samples, reading.channel);
         }
         for (let i = 0; i < reading.samples.length; i++) {
             const sample = reading.samples[2] / 100000;
@@ -74,13 +81,25 @@ import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../s
         await client.connect();
         await client.start();
         document.getElementById('headset-name')!.innerText = client.deviceName;
+
         client.eegReadings.subscribe((reading) => {
             plot(reading);
+            console.log('is this working? (eegReadings)');
         });
 
         client.ppgReadings.subscribe((reading) => {
             plotPPG(reading);
+            console.log('is this working? (ppgReadings)');
         });
+
+        zipSamples(client.eegReadings).subscribe((reading) => {
+            console.log(reading);
+        });
+
+        zipSamplesPPG(client.ppgReadings).subscribe((reading) => {
+            console.log(reading);
+        });
+
         client.telemetryData.subscribe((reading) => {
             document.getElementById('temperature')!.innerText = reading.temperature.toString() + '℃';
             document.getElementById('batteryLevel')!.innerText = reading.batteryLevel.toFixed(2) + '%';

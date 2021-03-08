@@ -7,7 +7,7 @@ export interface EEGReading {
 
 export interface PPGReading {
     index: number;
-    channel: number; // 0 to 4
+    channel: number; // 0 to 3
     timestamp: number; // milliseconds since epoch
     samples: number[]; // 12 samples each time
 }
