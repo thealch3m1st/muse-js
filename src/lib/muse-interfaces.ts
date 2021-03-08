@@ -5,6 +5,13 @@ export interface EEGReading {
     samples: number[]; // 12 samples each time
 }
 
+export interface PPGReading {
+    index: number;
+    channel: number; // 0 to 4
+    timestamp: number; // milliseconds since epoch
+    samples: number[]; // 12 samples each time
+}
+
 export interface TelemetryData {
     sequenceId: number;
     batteryLevel: number;

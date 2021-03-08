@@ -21,6 +21,21 @@
             margin-bottom: 4px;
         }
 
+        .ppg-section {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 5px;
+        }
+
+        .ppg-item {
+            margin: 5px;
+        }
+
+        .ppg-item h3 {
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
         canvas {
             background: #333;
             border: solid black 1px;
@@ -74,6 +89,23 @@
         <div class="electrode-item">
             <h3>Electrode 5</h3>
             <canvas id="electrode5"></canvas>
+        </div>
+    </div>
+
+    <div class="ppg-section">
+        <div class="ppg-item">
+            <h3>PPG 1</h3>
+            <canvas id="ppg1"></canvas>
+        </div>
+
+        <div class="ppg-item">
+            <h3>PPG 1</h3>
+            <canvas id="ppg2"></canvas>
+        </div>
+
+        <div class="ppg-item">
+            <h3>PPG 3</h3>
+            <canvas id="ppg3"></canvas>
         </div>
     </div>
 

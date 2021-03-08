@@ -8,10 +8,18 @@ import {
     GyroscopeData,
     MuseControlResponse,
     MuseDeviceInfo,
+    PPGReading,
     TelemetryData,
     XYZ,
 } from './lib/muse-interfaces';
-import { decodeEEGSamples, parseAccelerometer, parseControl, parseGyroscope, parseTelemetry } from './lib/muse-parse';
+import {
+    decodeEEGSamples,
+    decodePPGSamples,
+    parseAccelerometer,
+    parseControl,
+    parseGyroscope,
+    parseTelemetry,
+} from './lib/muse-parse';
 import { decodeResponse, encodeCommand, observableCharacteristic } from './lib/muse-utils';
 
 export { zipSamples, EEGSample } from './lib/zip-samples';
@@ -22,6 +30,13 @@ const CONTROL_CHARACTERISTIC = '273e0001-4c4d-454d-96be-f03bac821358';
 const TELEMETRY_CHARACTERISTIC = '273e000b-4c4d-454d-96be-f03bac821358';
 const GYROSCOPE_CHARACTERISTIC = '273e0009-4c4d-454d-96be-f03bac821358';
 const ACCELEROMETER_CHARACTERISTIC = '273e000a-4c4d-454d-96be-f03bac821358';
+
+const PPG_CHARACTERISTICS = [
+    '273e000f-4c4d-454d-96be-f03bac821358',
+    '273e0010-4c4d-454d-96be-f03bac821358',
+    '273e0011-4c4d-454d-96be-f03bac821358',
+];
+
 const EEG_CHARACTERISTICS = [
     '273e0003-4c4d-454d-96be-f03bac821358',
     '273e0004-4c4d-454d-96be-f03bac821358',
@@ -29,10 +44,13 @@ const EEG_CHARACTERISTICS = [
     '273e0006-4c4d-454d-96be-f03bac821358',
     '273e0007-4c4d-454d-96be-f03bac821358',
 ];
+
 export const EEG_FREQUENCY = 256;
+export const PPG_FREQUENCY = 256;
 
 // These names match the characteristics defined in EEG_CHARACTERISTICS above
 export const channelNames = ['TP9', 'AF7', 'AF8', 'TP10', 'AUX'];
+export const ppgChannelNames = ['PPG0', 'PPG1', 'PPG2'];
 
 export class MuseClient {
     enableAux = false;
@@ -44,11 +62,13 @@ export class MuseClient {
     gyroscopeData: Observable<GyroscopeData>;
     accelerometerData: Observable<AccelerometerData>;
     eegReadings: Observable<EEGReading>;
+    ppgReadings: Observable<PPGReading>;
     eventMarkers: Subject<EventMarker>;
 
     private gatt: BluetoothRemoteGATTServer | null = null;
     private controlChar: BluetoothRemoteGATTCharacteristic;
     private eegCharacteristics: BluetoothRemoteGATTCharacteristic[];
+    private ppgCharacteristics: BluetoothRemoteGATTCharacteristic[];
 
     private lastIndex: number | null = null;
     private lastTimestamp: number | null = null;
@@ -119,6 +139,30 @@ export class MuseClient {
             this.eegCharacteristics.push(eegChar);
         }
         this.eegReadings = merge(...eegObservables);
+
+        // PPG
+        this.ppgCharacteristics = [];
+        const ppgObservables = [];
+        for (let channelIndex = 0; channelIndex < PPG_CHARACTERISTICS.length; channelIndex++) {
+            const characteristicId = PPG_CHARACTERISTICS[channelIndex];
+            const ppgChar = await service.getCharacteristic(characteristicId);
+            ppgObservables.push(
+                (await observableCharacteristic(ppgChar)).pipe(
+                    map((data) => {
+                        const eventIndex = data.getUint16(0);
+                        return {
+                            channel: channelIndex,
+                            index: eventIndex,
+                            samples: decodePPGSamples(new Uint8Array(data.buffer).subarray(2)),
+                            timestamp: this.getTimestamp(eventIndex),
+                        };
+                    }),
+                ),
+            );
+            this.ppgCharacteristics.push(ppgChar);
+        }
+        this.ppgReadings = merge(...ppgObservables);
+
         this.connectionStatus.next(true);
     }
 
@@ -128,7 +172,8 @@ export class MuseClient {
 
     async start() {
         await this.pause();
-        const preset = this.enableAux ? 'p20' : 'p21';
+        // const preset = this.enableAux ? 'p20' : 'p21';
+        const preset = 'p21';
         await this.controlChar.writeValue(encodeCommand(preset));
         await this.controlChar.writeValue(encodeCommand('s'));
         await this.resume();
@@ -143,7 +188,12 @@ export class MuseClient {
     }
 
     async deviceInfo() {
-        const resultListener = this.controlResponses.pipe(filter((r) => !!r.fw), take(1)).toPromise();
+        const resultListener = this.controlResponses
+            .pipe(
+                filter((r) => !!r.fw),
+                take(1),
+            )
+            .toPromise();
         await this.sendCommand('v1');
         return resultListener as Promise<MuseDeviceInfo>;
     }

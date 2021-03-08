@@ -23,9 +23,9 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
     // tslint:disable:no-bitwise
     for (let i = 0; i < samples.length; i++) {
         if (i % 3 === 0) {
-            samples12Bit.push(samples[i] << 4 | samples[i + 1] >> 4);
+            samples12Bit.push((samples[i] << 4) | (samples[i + 1] >> 4));
         } else {
-            samples12Bit.push((samples[i] & 0xf) << 8 | samples[i + 1]);
+            samples12Bit.push(((samples[i] & 0xf) << 8) | samples[i + 1]);
             i++;
         }
     }
@@ -33,16 +33,32 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
     return samples12Bit;
 }
 
+export function decodeUnsigned24BitData(samples: Uint8Array) {
+    const samples24Bit = [];
+    // tslint:disable:no-bitwise
+
+    const dv = new DataView(samples.buffer);
+    for (let i = 0; i < samples.length / 3; i++) {
+        samples24Bit.push((samples[i] << 16) | (samples[i + 1] << 8) | samples[i + 2]);
+        // var val = (dv.getUint16(i) << 8) + dv.getUint8(i+2);
+        // samples24Bit.push(val);
+    }
+    // tslint:enable:no-bitwise
+    return samples24Bit;
+}
+
+export function decodePPGSamples(samples: Uint8Array) {
+    return decodeUnsigned24BitData(samples);
+}
 export function decodeEEGSamples(samples: Uint8Array) {
-    return decodeUnsigned12BitData(samples)
-        .map((n) => 0.48828125 * (n - 0x800));
+    return decodeUnsigned12BitData(samples).map((n) => 0.48828125 * (n - 0x800));
 }
 
 export function parseTelemetry(data: DataView): TelemetryData {
     // tslint:disable:object-literal-sort-keys
     return {
         sequenceId: data.getUint16(0),
-        batteryLevel: data.getUint16(2) / 512.,
+        batteryLevel: data.getUint16(2) / 512,
         fuelGaugeVoltage: data.getUint16(4) * 2.2,
         // Next 2 bytes are probably ADC millivolt level, not sure
         temperature: data.getUint16(8),
