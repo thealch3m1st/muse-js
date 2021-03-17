@@ -30,7 +30,7 @@ import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../s
             console.log('no context');
             return;
         }
-        console.log('context');
+        // console.log('context');
         const width = canvas.width / 12.0;
         const height = canvas.height / 2.0;
         context.fillStyle = 'green';
@@ -84,21 +84,21 @@ import { channelNames, EEGReading, MuseClient, ppgChannelNames } from './../../s
 
         client.eegReadings.subscribe((reading) => {
             plot(reading);
-            console.log('is this working? (eegReadings)');
+            // console.log('is this working? (eegReadings)');
         });
 
-        client.ppgReadings.subscribe((reading) => {
-            plotPPG(reading);
-            console.log('is this working? (ppgReadings)');
-        });
+        // client.ppgReadings.subscribe((reading) => {
+        //     plotPPG(reading);
+        //     // console.log('is this working? (ppgReadings)');
+        // });
 
-        zipSamples(client.eegReadings).subscribe((reading) => {
-            console.log(reading);
-        });
+        // zipSamples(client.eegReadings).subscribe((reading) => {
+        //     console.log(reading);
+        // });
 
-        zipSamplesPPG(client.ppgReadings).subscribe((reading) => {
-            console.log(reading);
-        });
+        // zipSamplesPPG(client.ppgReadings).subscribe((reading) => {
+        //     console.log(reading);
+        // });
 
         client.telemetryData.subscribe((reading) => {
             document.getElementById('temperature')!.innerText = reading.temperature.toString() + '℃';

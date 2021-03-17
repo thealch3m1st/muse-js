@@ -1,5 +1,5 @@
-import { BehaviorSubject, fromEvent, merge, Observable, Subject } from 'rxjs';
-import { filter, first, map, share, take } from 'rxjs/operators';
+import { BehaviorSubject, fromEvent, merge, Observable, Subject, zip } from 'rxjs';
+import { buffer, filter, first, map, share, take, mergeAll } from 'rxjs/operators';
 
 import {
     AccelerometerData,
@@ -22,7 +22,18 @@ import {
 } from './lib/muse-parse';
 import { decodeResponse, encodeCommand, observableCharacteristic } from './lib/muse-utils';
 
-export { zipSamples, EEGSample, PPGSample } from './lib/zip-samples';
+export interface EEGSample {
+    index: number;
+    timestamp: number; // milliseconds since epoch
+    electrodes: number[];
+}
+
+export interface PPGSample {
+    index: number;
+    timestamp: number; // milliseconds since epoch
+    data: number;
+}
+// export {EEGSample, PPGSample } from './lib/zip-samples';
 export {
     EEGReading,
     PPGReading,
@@ -94,12 +105,17 @@ export class MuseClient {
         this.deviceName = this.gatt.device.name || null;
 
         const service = await this.gatt.getPrimaryService(MUSE_SERVICE);
-        fromEvent(this.gatt.device, 'gattserverdisconnected')
-            .pipe(first())
-            .subscribe(() => {
-                this.gatt = null;
-                this.connectionStatus.next(false);
-            });
+
+        this.gatt.device.addEventListener('gattserverdisconnected', (ev) => {
+            this.gatt = null;
+            this.connectionStatus.next(false);
+        });
+        // fromEvent(this.gatt.device, 'gattserverdisconnected')
+        //     .pipe(first())
+        //     .subscribe(() => {
+        //         this.gatt = null;
+        //         this.connectionStatus.next(false);
+        //     });
 
         // Control
         this.controlChar = await service.getCharacteristic(CONTROL_CHARACTERISTIC);
@@ -127,31 +143,66 @@ export class MuseClient {
 
         // EEG
         this.eegCharacteristics = [];
-        const eegObservables = [];
+        const eegObservables: Observable<EEGReading>[] = [];
         const channelCount = this.enableAux ? EEG_CHARACTERISTICS.length : 4;
         for (let channelIndex = 0; channelIndex < channelCount; channelIndex++) {
             const characteristicId = EEG_CHARACTERISTICS[channelIndex];
             const eegChar = await service.getCharacteristic(characteristicId);
             eegObservables.push(
                 (await observableCharacteristic(eegChar)).pipe(
-                    map((data) => {
-                        const eventIndex = data.getUint16(0);
-                        return {
-                            electrode: channelIndex,
-                            index: eventIndex,
-                            samples: decodeEEGSamples(new Uint8Array(data.buffer).subarray(2)),
-                            timestamp: this.getTimestamp(eventIndex),
-                        };
-                    }),
+                    map(
+                        (data): EEGReading => {
+                            const eventIndex = data.getUint16(0);
+                            return {
+                                electrode: channelIndex,
+                                index: eventIndex,
+                                samples: decodeEEGSamples(new Uint8Array(data.buffer).subarray(2)),
+                                timestamp: this.getTimestamp(eventIndex),
+                            };
+                        },
+                    ),
                 ),
             );
             this.eegCharacteristics.push(eegChar);
         }
-        this.eegReadings = merge(...eegObservables);
+        const zippedEEG = zip(eegObservables[0], eegObservables[1], eegObservables[2], eegObservables[3]).pipe(
+            map(([one, two, three, four]) => [one, two, three, four]),
+        );
 
+        // zip(...eegObservables).pipe(
+        //     map(([one,two,three,four]) => ([one, two,three,four]))
+        // ).subscribe(x => console.log(x))
+
+        // const eegSamples = new Observable((subscriber) =>{
+        //     const zipped = zip(eegObservables).subscribe((val)=>{
+        //         const samples: EEGSample[] = []
+        //         console.log(JSON.stringify(val));
+        //         // const getSamplesForIndex = (i:number, val: EEGReading[]):number[] => {
+        //         //     const s:number[] = []
+        //         //     for(var j=0; j<val.length;j++){
+        //         //         s.push(val[i].samples[j]);
+        //         //     }
+        //         //     return s;
+        //         // }
+        //         // for(var i=0; i<val[0].samples.length; i++){
+        //         //     samples.push({
+        //         //         index:val[0].index,
+        //         //         timestamp:val[0].timestamp,
+        //         //         electrodes: getSamplesForIndex(i, val)
+        //         //     })
+        //         // }
+        //         // subscriber.next(samples);
+        //     })
+        // });
+        this.eegReadings = merge(...eegObservables);
+        // const readings = this.eegReadings;
+
+        // eegSamples.subscribe((val)=>{
+        //     console.log(val);
+        // })
         // PPG
         this.ppgCharacteristics = [];
-        const ppgObservables = [];
+        const ppgObservables: Observable<PPGReading>[] = [];
         for (let channelIndex = 0; channelIndex < PPG_CHARACTERISTICS.length; channelIndex++) {
             const characteristicId = PPG_CHARACTERISTICS[channelIndex];
             const ppgChar = await service.getCharacteristic(characteristicId);
@@ -171,6 +222,13 @@ export class MuseClient {
             this.ppgCharacteristics.push(ppgChar);
         }
         this.ppgReadings = merge(...ppgObservables);
+        const zippedPPG = zip(ppgObservables[0], ppgObservables[1], ppgObservables[2]).pipe(
+            map(([one, two, three]) => [one, two, three]),
+        );
+
+        zip(zippedEEG, zippedPPG)
+            .pipe(map(([eeg, ppg]) => [eeg, ppg]))
+            .subscribe((val) => console.log(val));
 
         this.connectionStatus.next(true);
     }
